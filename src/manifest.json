@@ -1,0 +1,27 @@
+{
+    "name": "业务网邮箱提醒",
+    "description":"新邮件提醒功能，每分钟检查是否有未读邮件。",
+    "version": "1.0",
+    "content_scripts": [
+        {
+            "matches": ["*://mail.hg.cn/*"],
+            "js": [
+                "content-script.js"
+            ]
+        }
+    ],
+    "background": {
+        "scripts": ["background.js"],
+        "persistent": true
+    },
+    "permissions": ["notifications","tabs"],
+    "browser_action": {
+        "default_icon": "128x128_icon.png"
+    },
+    "icons": {
+        "32": "32x32_icon.png",
+        "48": "48x48_icon.png",
+        "128": "128x128_icon.png"
+    },
+    "manifest_version": 2
+}

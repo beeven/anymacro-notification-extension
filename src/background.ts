@@ -1,10 +1,10 @@
 chrome.runtime.onMessage.addListener(data => {
     if (data.type === 'notification') {
-      chrome.notifications.create('', data.options);
+      chrome.notifications.create('anymacro_checkmail', data.options);
     }
   });
 
-chrome.action.onClicked.addListener(async (tab) => {
+chrome.browserAction.onClicked.addListener(async (tab) => {
   let queryOptions = {url:"*://mail.hg.cn/*"};
   let [t] = await chrome.tabs.query(queryOptions);
   if(t) {
