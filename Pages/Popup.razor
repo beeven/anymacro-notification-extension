@@ -1,9 +1,11 @@
 @page "/popup.html"
 @inherits BasePage
-@implements IDisposable
+@implements IAsyncDisposable
 @inject ConfigStorageService configStorageService
 @inject HttpClient httpClient
 @using System.Reactive.Linq
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
 
 <MudContainer Class="px-8" MaxWidth="MaxWidth.False">
     <MudGrid>
@@ -19,11 +21,25 @@
         <MudItem xs="12">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OnTestButtonClicked">检测邮件测试</MudButton>
         </MudItem>
+        <MudItem xs="12">
+            <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="OnJSTestButtonClicked">检测邮件JS</MudButton>
+        </MudItem>
     </MudGrid>
 </MudContainer>
 
 
 @code {
+
+    private IJSObjectReference module;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import",
+            "./scripts.js");
+        }
+    }
 
     private bool _pluginEnabled;
     public bool PluginEnabled
@@ -72,11 +88,15 @@
         }));
     }
 
-    public void Dispose()
+    async ValueTask IAsyncDisposable.DisposeAsync()
     {
         foreach (var s in _subscriptions)
         {
             s.Dispose();
+        }
+        if (module is not null)
+        {
+            await module.DisposeAsync();
         }
     }
 
@@ -97,5 +117,11 @@
         var resp = await httpClient.SendAsync(req);
         var body = await resp.Content.ReadAsStringAsync();
         System.Console.WriteLine(body);
+    }
+
+    public async void OnJSTestButtonClicked(MouseEventArgs eventArgs)
+    {
+        var ret = await module.InvokeAsync<string>("checkMail");
+        System.Console.WriteLine(ret);
     }
 }
