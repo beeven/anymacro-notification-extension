@@ -1,0 +1,101 @@
+@page "/popup.html"
+@inherits BasePage
+@implements IDisposable
+@inject ConfigStorageService configStorageService
+@inject HttpClient httpClient
+@using System.Reactive.Linq
+
+<MudContainer Class="px-8" MaxWidth="MaxWidth.False">
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="4">
+            <MudPaper Elevation="0" Class="mx-auto">
+                <MudSwitch @bind-Checked="PluginEnabled" Label="启用通知" Color="Color.Primary" />
+
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12">
+            <MudSlider @bind-Value="AlarmInterval" Min="1" Max="30" Step="1">通知间隔: @AlarmInterval 分钟</MudSlider>
+        </MudItem>
+        <MudItem xs="12">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OnTestButtonClicked">检测邮件测试</MudButton>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+
+@code {
+
+    private bool _pluginEnabled;
+    public bool PluginEnabled
+    {
+        get { return _pluginEnabled; }
+        set
+        {
+            _pluginEnabled = value;
+            if (_config != null)
+            {
+                _config.PluginEnabled = value;
+            }
+        }
+    }
+
+    private int _alarmInterval;
+    private System.Reactive.Subjects.Subject<int> _alarmIntervalSubject = new System.Reactive.Subjects.Subject<int>();
+    public IObservable<int> AlarmIntervalObject;
+    public int AlarmInterval
+    {
+        get { return _alarmInterval; }
+        set
+        {
+            _alarmInterval = value;
+            _alarmIntervalSubject.OnNext(value);
+        }
+    }
+    private PluginConfig _config;
+    private List<IDisposable> _subscriptions = new List<IDisposable>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        // this opens index.html in the extension as a new tab when the background page is loaded
+
+        System.Console.WriteLine("Popup Initialized.");
+        _config = await configStorageService.GetConfig();
+        _pluginEnabled = _config.PluginEnabled;
+        _alarmInterval = _config.AlarmInterval;
+
+        AlarmIntervalObject = _alarmIntervalSubject.AsObservable();
+        _subscriptions.Add(AlarmIntervalObject.Throttle(TimeSpan.FromMilliseconds(500)).DistinctUntilChanged().Subscribe((value)
+        =>
+        {
+            _config.AlarmInterval = value;
+        }));
+    }
+
+    public void Dispose()
+    {
+        foreach (var s in _subscriptions)
+        {
+            s.Dispose();
+        }
+    }
+
+    public async void OnTestButtonClicked(MouseEventArgs eventArgs)
+    {
+        string cmd =
+        "{\"model\":\"mail\",\"cmd\":\"list\",\"data\":{\"did\":\"91\",\"flag\":\"\",\"ord\":\"timedesc\",\"page\":1,\"pagecount\":\"20\",\"search\":false,\"queryand\":false}}";
+        string reqtime = DateTimeOffset.Now.ToUnixTimeSeconds().ToString();
+        HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Post, $"http://mail.hg.cn/rpc?{reqtime}")
+        {
+            Content = new FormUrlEncodedContent(new List<KeyValuePair<string, string>>{
+                new KeyValuePair<string, string>("anyobj", cmd),
+                new KeyValuePair<string, string>("reqtime", reqtime),
+                new KeyValuePair<string, string>("randse", reqtime)
+                })
+        };
+        System.Console.WriteLine(req.Content.Headers.ContentType?.MediaType);
+        var resp = await httpClient.SendAsync(req);
+        var body = await resp.Content.ReadAsStringAsync();
+        System.Console.WriteLine(body);
+    }
+}
