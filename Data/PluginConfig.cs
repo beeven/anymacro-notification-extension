@@ -25,14 +25,14 @@ namespace anymacro_notification_blazor
             }
         }
 
-        private bool _pluginEnabled;
+        private bool _pluginEnabled = true;
         public bool PluginEnabled
         {
             get { return _pluginEnabled; }
             set { SetPropertyField(nameof(PluginEnabled), ref _pluginEnabled, value); }
         }
 
-        private int _alarmInterval;
+        private int _alarmInterval = 1;
         public int AlarmInterval
         {
             get { return _alarmInterval; }
@@ -40,21 +40,14 @@ namespace anymacro_notification_blazor
         }
 
 
-        private string _authCookies;
-        public string AuthCookies
-        {
-            get { return _authCookies; }
-            set { SetPropertyField(nameof(AuthCookies), ref _authCookies, value); }
-        }
-
-        private string _mobile;
+        private string _mobile = "";
         public string Mobile
         {
             get { return _mobile; }
             set { SetPropertyField(nameof(Mobile), ref _mobile, value); }
         }
 
-        private bool _mobileNotificationEnabled;
+        private bool _mobileNotificationEnabled = false;
         private bool disposedValue;
 
         public bool MobileNotificationEnabled

@@ -2,10 +2,10 @@
 @inherits BasePage
 @implements IAsyncDisposable
 @inject ConfigStorageService configStorageService
-@inject HttpClient httpClient
 @using System.Reactive.Linq
 @using Microsoft.JSInterop
 @inject IJSRuntime JS
+@inject IHttpClientFactory ClientFactory
 
 <MudContainer Class="px-8" MaxWidth="MaxWidth.False">
     <MudGrid>
@@ -103,20 +103,19 @@
     public async void OnTestButtonClicked(MouseEventArgs eventArgs)
     {
         string cmd =
-        "{\"model\":\"mail\",\"cmd\":\"list\",\"data\":{\"did\":\"91\",\"flag\":\"\",\"ord\":\"timedesc\",\"page\":1,\"pagecount\":\"20\",\"search\":false,\"queryand\":false}}";
+        "{\"model\":\"mail\",\"cmd\":\"list\",\"data\":{\"did\":\"91\",\"flag\":\"\",\"ord\":\"timedesc\",\"page\":1,\"pagecount\":\"1\",\"search\":false,\"queryand\":false}}";
         string reqtime = DateTimeOffset.Now.ToUnixTimeSeconds().ToString();
-        HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Post, $"http://mail.hg.cn/rpc?{reqtime}")
-        {
-            Content = new FormUrlEncodedContent(new List<KeyValuePair<string, string>>{
+        
+        var httpClient = ClientFactory.CreateClient("WebAPI");
+
+        var resp = await httpClient.PostAsync($"http://mail.hg.cn/rpc?{reqtime}", new FormUrlEncodedContent(new List<KeyValuePair<string, string>>{
                 new KeyValuePair<string, string>("anyobj", cmd),
                 new KeyValuePair<string, string>("reqtime", reqtime),
                 new KeyValuePair<string, string>("randse", reqtime)
-                })
-        };
-        System.Console.WriteLine(req.Content.Headers.ContentType?.MediaType);
-        var resp = await httpClient.SendAsync(req);
-        var body = await resp.Content.ReadAsStringAsync();
-        System.Console.WriteLine(body);
+                }));
+        var bodyStream = await resp.Content.ReadAsStreamAsync();
+        var decoded = await System.Text.Json.JsonSerializer.DeserializeAsync<CheckMailResponse>(bodyStream, new System.Text.Json.JsonSerializerOptions(){ PropertyNameCaseInsensitive = true});
+        System.Console.WriteLine(decoded);
     }
 
     public async void OnJSTestButtonClicked(MouseEventArgs eventArgs)

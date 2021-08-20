@@ -1,8 +1,19 @@
 @page "/background.html"
 @inherits BackgroundPage
+@using System.ComponentModel
 @using WebExtensions.Net.Tabs
+@using WebExtensions.Net.Notifications
+@using System.Text.Json
+@inject ConfigStorageService StoreService
+@inject IHttpClientFactory ClientFactory
+@implements IDisposable
 
 @code {
+
+    static readonly string ALARM_NAME = "anymacro-notification-checkmail";
+    static readonly string NOTIFICATION_ID = "anymacro-notification-notification-id";
+
+    private PluginConfig _config;
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
@@ -13,6 +24,125 @@
             Url = extensionUrl
         });
 
-           
+
+        _config = await StoreService.GetConfig();
+
+        await WebExtensions.Alarms.Create(ALARM_NAME, new WebExtensions.Net.Alarms.AlarmInfo
+        {
+            PeriodInMinutes =
+        _config.AlarmInterval
+        });
+        await WebExtensions.Alarms.OnAlarm.AddListener(async (alarm) =>
+        {
+            if (alarm.Name == ALARM_NAME)
+            {
+                await CheckMail();
+            }
+        });
+
+        _config.PropertyChanged += AlarmIntervalChanged;
+
+        await WebExtensions.Notifications.OnClicked.AddListener(async (notificationId) =>
+        {
+            if (notificationId == NOTIFICATION_ID)
+            {
+                var tabs = await WebExtensions.Tabs.Query(new QueryInfo { Url = "*://mail.hg.cn/*" });
+                if (tabs.Count() > 0)
+                {
+                    await WebExtensions.Tabs.Highlight(new HighlightHighlightInfo
+                    {
+                        Tabs = tabs.First().Index,
+                        WindowId =
+        tabs.First().WindowId
+                    });
+                }
+                else
+                {
+                    await WebExtensions.Tabs.Create(new CreateProperties { Url = "http://mail.hg.cn/", Active = true });
+                }
+            }
+        });
     }
+
+
+    private async void AlarmIntervalChanged(object sender, PropertyChangedEventArgs eventArgs)
+    {
+        await WebExtensions.Alarms.Clear(ALARM_NAME);
+        await WebExtensions.Alarms.Create(ALARM_NAME, new WebExtensions.Net.Alarms.AlarmInfo
+        {
+            PeriodInMinutes =
+        _config.AlarmInterval
+        });
+    }
+
+    void IDisposable.Dispose()
+    {
+        if (_config is not null)
+        {
+            _config.PropertyChanged -= AlarmIntervalChanged;
+        }
+    }
+
+
+    public async Task CheckMail()
+    {
+        string cmd =
+        "{\"model\":\"mail\",\"cmd\":\"list\",\"data\":{\"did\":\"91\",\"flag\":\"\",\"ord\":\"timedesc\",\"page\":1,\"pagecount\":\"1\",\"search\":false,\"queryand\":false}}";
+        string reqtime = DateTimeOffset.Now.ToUnixTimeSeconds().ToString();
+
+        var httpClient = ClientFactory.CreateClient("WebAPI");
+
+        var resp = await httpClient.PostAsync($"http://mail.hg.cn/rpc?{reqtime}", new FormUrlEncodedContent(new
+        List<KeyValuePair<string, string>>{
+new KeyValuePair<string, string>("anyobj", cmd),
+new KeyValuePair<string, string>("reqtime", reqtime),
+new KeyValuePair<string, string>("randse", reqtime)
+}));
+        if (resp.IsSuccessStatusCode)
+        {
+            var bodyStream = await resp.Content.ReadAsStreamAsync();
+            try
+            {
+                var decoded = await JsonSerializer.DeserializeAsync<CheckMailResponse>(bodyStream, new JsonSerializerOptions()
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+                System.Console.WriteLine(decoded);
+                if (decoded.Data.Info.NewMailNum > 0)
+                {
+                    await WebExtensions.Notifications.Create(NOTIFICATION_ID, new CreateNotificationOptions()
+                    {
+                        IsClickable = true,
+                        IconUrl = "icon_notify.png",
+                        Title = "业务网邮箱",
+                        Message = $"你有{decoded.Data.Info.NewMailNum}封未读邮件",
+                        Type = TemplateType.Basic
+                    });
+                }
+            }
+            catch
+            {
+                await PromptLogin();
+            }
+        }
+        else
+        {
+            await PromptLogin();
+        }
+
+    }
+
+    private async ValueTask<string> PromptLogin()
+    {
+        return await WebExtensions.Notifications.Create(NOTIFICATION_ID, new CreateNotificationOptions
+        {
+            IsClickable = true,
+            IconUrl = "icon_notify.png",
+            Title = "业务网邮箱",
+            Message = "你的登录信息已失效，请重新登录。",
+            Type = TemplateType.Basic
+        });
+    }
+
+
 }
